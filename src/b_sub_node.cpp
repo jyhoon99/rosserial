@@ -1,9 +1,13 @@
 #include <ros/ros.h>
+#include <chrono>
+#include <thread>
 
 #include <std_msgs/String.h>
 #include "dynamixel_sdk_examples/GetPosition.h"
 #include "dynamixel_sdk_examples/SetPosition.h"
 #include "dynamixel_sdk/dynamixel_sdk.h"
+#include <hatch/Message.h>
+
 
 using namespace dynamixel;
 
@@ -16,6 +20,7 @@ using namespace dynamixel;
 #define PROTOCOL_VERSION 1.0
 
 // Default setting
+#define DXL1_ID               1               // DXL1 ID
 #define DXL2_ID               2               // DXL1 ID
 #define DXL3_ID               3            // DXL2 ID
 #define BAUDRATE              115200          // Default Baudrate of DYNAMIXEL X series
@@ -24,67 +29,34 @@ using namespace dynamixel;
 PortHandler * portHandler;
 PacketHandler * packetHandler;
 
-//  const uint8_t  ID2 = 2;
-//  const uint8_t  ID3 = 3;
-
-// const int B_MID_POSITION = 512; 
-// const int B_AX2_GOAL_POSITION = 662; 
-// const int B_AX3_GOAL_POSITION = 287; 
-
-bool getPresentPositionCallback(
-  dynamixel_sdk_examples::GetPosition::Request & req,
-  dynamixel_sdk_examples::GetPosition::Response & res)
+void topicCallback(const hatch::Message::ConstPtr &work)
 {
-  uint8_t dxl_error = 0;
-  int dxl_comm_result = COMM_TX_FAIL;
+  uint8_t mod = (uint8_t)work->mode;
+  uint8_t dxl_error = 0; 
+  int dxl_comm_result = 0;
 
-  // Position Value of X series is 4 byte data. For AX & MX(1.0) use 2 byte data(int16_t) for the Position Value.
-  int32_t position = 0;
-
-  // Read Present Position (length : 4 bytes) and Convert uint32 -> int32
-  // When reading 2 byte data from AX / MX(1.0), use read2ByteTxRx() instead.
-  dxl_comm_result = packetHandler->read4ByteTxRx(
-    portHandler, (uint8_t)req.id, ADDR_PRESENT_POSITION, (uint32_t *)&position, &dxl_error);
-  if (dxl_comm_result == COMM_SUCCESS) {
-    ROS_INFO("getPosition : [ID:%d] -> [POSITION:%d]", req.id, position);
-    res.position = position;
-    return true;
-  } else {
-    ROS_INFO("Failed to get position! Result: %d", dxl_comm_result);
-    return false;
+  if (mod == 1){
+    //동작1
+    dxl_comm_result = packetHandler->write4ByteTxRx(portHandler, DXL1_ID, ADDR_GOAL_POSITION, 6554000, &dxl_error);
+    sleep(6); // wait for 10 seconds
+    //리니어
+    dxl_comm_result = packetHandler->write4ByteTxRx(portHandler, DXL1_ID, ADDR_GOAL_POSITION, 6553800, &dxl_error);
+    sleep(6);
+    dxl_comm_result = packetHandler->write4ByteTxRx(portHandler, DXL1_ID, ADDR_GOAL_POSITION, 6554150, &dxl_error);
+  } else if (mod == 2){
+    //동작2
+   dxl_comm_result = packetHandler->write4ByteTxRx(portHandler, DXL2_ID, ADDR_GOAL_POSITION, 6554100, &dxl_error);    //655855
+  sleep(3); // wait for 5 seconds
+   dxl_comm_result = packetHandler->write4ByteTxRx(portHandler, DXL3_ID, ADDR_GOAL_POSITION, 6553650, &dxl_error);    //655855
+  sleep(3);
+   dxl_comm_result = packetHandler->write4ByteTxRx(portHandler, DXL3_ID, ADDR_GOAL_POSITION, 6553800, &dxl_error);    //655855    
+  } else if (mod == 3){
+    //동작3
+  dxl_comm_result = packetHandler->write4ByteTxRx(portHandler, DXL2_ID, ADDR_GOAL_POSITION, 6553790, &dxl_error);    
   }
+    ROS_INFO("Received message:");
+    ROS_INFO("mode = %d", work->mode);
 }
-
-void setPositionCallback(const dynamixel_sdk_examples::SetPosition::ConstPtr & msg)
-{
-  uint8_t dxl_error = 0;
-  int dxl_comm_result = COMM_TX_FAIL;
-
-  // Position Value of X series is 4 byte data. For AX & MX(1.0) use 2 byte data(uint16_t) for the Position Value.
-  uint32_t position = (unsigned int)msg->position; // Convert int32 -> uint32
-
-  // Write Goal Position (length : 4 bytes)
-  // When writing 2 byte data to AX / MX(1.0), use write2ByteTxRx() instead.
-  dxl_comm_result = packetHandler->write4ByteTxRx(
-    portHandler, (uint8_t)msg->id, ADDR_GOAL_POSITION, position, &dxl_error);
-  if (dxl_comm_result == COMM_SUCCESS) {
-    ROS_INFO("setPosition : [ID:%d] [POSITION:%d]", msg->id, msg->position);
-  } else {
-    ROS_ERROR("Failed to set position! Result: %d", dxl_comm_result);
-  }
-}
-
-
-
-// void backCallback(const std_msgs::String::ConstPtr & msg)
-// {
-//   if(msg->data == "b")
-//   {
-//       ROS_INFO("Received message: %s", msg->data.c_str());
-//     // 후면부 기능 실행 코드 작성
-
-//   }
-// }
 
 int main(int argc, char** argv)
 {
@@ -101,6 +73,13 @@ int main(int argc, char** argv)
 
   if (!portHandler->setBaudRate(BAUDRATE)) {
     ROS_ERROR("Failed to set the baudrate!");
+    return -1;
+  }
+  
+  dxl_comm_result = packetHandler->write1ByteTxRx(
+    portHandler, DXL1_ID, ADDR_TORQUE_ENABLE, 1, &dxl_error);
+  if (dxl_comm_result != COMM_SUCCESS) {
+    ROS_ERROR("JYH Failed to enable torque for Dynamixel ID %d", DXL2_ID);
     return -1;
   }
 
@@ -120,19 +99,11 @@ int main(int argc, char** argv)
 
   ros::init(argc, argv, "back_sub_node");
   ros::NodeHandle nh;
-  ros::ServiceServer get_position_srv = nh.advertiseService("/get_position", getPresentPositionCallback);
-  ros::Subscriber set_position_sub = nh.subscribe("/set_position", 10, setPositionCallback);
+  ros::Subscriber sub = nh.subscribe("/topic", 10, topicCallback);
   ros::spin();
 
   portHandler->closePort();
   return 0;
 
-  // ros::init(argc, argv, "back_sub_node");
-  // ros::NodeHandle nh;
 
-  // ros::Subscriber sub = nh.subscribe("hatch_topic", 1000, backCallback);
-
-  // ros::spin();
-
-  return 0;
 }

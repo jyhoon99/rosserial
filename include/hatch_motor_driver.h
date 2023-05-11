@@ -45,7 +45,7 @@ class HatchMotorDriver
     bool init(String hatch);
     void close(void);
     bool setTorque(bool onoff);
-    bool getTorque()
+    bool getTorque();
     bool readEncoder(int32_t &value);
     bool writeVelocity(int64_t value);
     bool contorlMotor(float* velocity);
