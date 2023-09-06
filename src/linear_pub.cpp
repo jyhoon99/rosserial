@@ -35,17 +35,5 @@ int main(int argc, char **argv) {
         pub.publish(msg);
         ros::spinOnce();
     }
-    // msg.data = 1900;
-    // pub.publish(msg);
-    // ROS_INFO("Published message: %d", msg.data);
 
-    // rate = ros::Rate(10); // 10 Hz
-    // while (ros::ok()) {
-    //     msg.data = 1035;
-    //     pub.publish(msg);
-    //     ROS_INFO("Published message: %d", msg.data);
-    //     rate.sleep();
-    // }
-
-    // return 0;
 }
